@@ -1,4 +1,5 @@
-FROM debian:bookworm-slim as builder
+#FROM debian:bookworm-slim as builder
+FROM nginx:stable as builder
 
 ENV NGINX_VERSION 1.21.4
 ENV OPENTELEMETRY_VERSION v1.1.0
@@ -8,13 +9,13 @@ RUN mkdir -p /install
 WORKDIR "/install"
 
 RUN apt-get update \
-    && apt-get -y install curl wget git build-essential autoconf libtool pkg-config ca-certificates gcc g++ libcurl4-openssl-dev libpcre3-dev gnupg2 lsb-release apt-transport-https software-properties-common zlib1g-dev \
+    && apt-get -y install curl wget git build-essential autoconf libtool pkg-config ca-certificates cmake gcc g++ libcurl4-openssl-dev libpcre3-dev gnupg2 lsb-release apt-transport-https software-properties-common zlib1g-dev \
     && apt-get clean all
 
-RUN curl -o /etc/apt/trusted.gpg.d/nginx_signing.asc https://nginx.org/keys/nginx_signing.key \
-    && apt-add-repository "deb http://nginx.org/packages/debian `lsb_release -cs` nginx" \
-    && /bin/bash -c 'echo -e "Package: *\nPin: origin nginx.org\nPin: release o=nginx\nPin-Priority: 900"' | tee /etc/apt/preferences.d/99nginx
-RUN DEBIAN_FRONTEND=noninteractive TZ="Europe/London" apt-get install --no-install-recommends --no-install-suggests -y cmake nginx
+#RUN curl -o /etc/apt/trusted.gpg.d/nginx_signing.asc https://nginx.org/keys/nginx_signing.key \
+#    && apt-add-repository "deb http://nginx.org/packages/debian `lsb_release -cs` nginx" \
+#    && /bin/bash -c 'echo -e "Package: *\nPin: origin nginx.org\nPin: release o=nginx\nPin-Priority: 900"' | tee /etc/apt/preferences.d/99nginx
+#RUN DEBIAN_FRONTEND=noninteractive TZ="Europe/London" apt-get install --no-install-recommends --no-install-suggests -y nginx
 
 RUN git clone --shallow-submodules --depth 1 --recurse-submodules -b v1.36.4  https://github.com/grpc/grpc   \
     && cd grpc \
@@ -68,12 +69,15 @@ RUN mkdir otel-nginx \
     && make install
 
 
-## Setup
-RUN mkdir /etc/nginx/modules \
-    && cp /install/otel-nginx/build/otel_ngx_module.so /etc/nginx/modules/
+FROM nginx:stable
+# https://github.com/nginxinc/docker-nginx/blob/b18fb328f999b28a7bb6d86e06b0756c1befa21a/stable/debian/Dockerfile
 
+## Setup
+RUN mkdir -p /etc/nginx/modules
+COPY --from=builder /install/otel-nginx/build/otel_ngx_module.so /etc/nginx/modules/
 COPY config/nginx.conf /etc/nginx
 COPY config/otel-nginx.toml /etc/nginx
+
 
 RUN mkdir /etc/nginx/lc
 VOLUME ["/etc/nginx/lc"]
